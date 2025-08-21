@@ -3,3 +3,10 @@ uvicorn[standard]==0.30.6
 python-dotenv==1.0.1
 google-generativeai==0.8.3
 langgraph==0.2.35
+pydantic>=2.7
+qdrant-client>=1.9
+fastembed>=0.3
+onnxruntime>=1.17
+requests>=2.31
+tqdm>=4.66
+rich>=13.7

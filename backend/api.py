@@ -1,11 +1,13 @@
+# api.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uuid
 
 from core import build_graph, initial_message
+from qdrant_service import resolve_city 
 
-app = FastAPI(title="TripPlanner API (LangGraph)", version="1.0.0")
+app = FastAPI(title="TripPlanner API (LangGraph)", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,7 +17,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Compile LangGraph once
 app_graph = build_graph()
 
 class StartOut(BaseModel):
@@ -33,21 +34,32 @@ class ChatOut(BaseModel):
     prefs: dict | None = None
     error: str | None = None
 
+class SelectCityIn(BaseModel):
+    session_id: str
+    city: str
+    country: str | None = None
+    lang: str | None = None
+
+class SelectCityOut(BaseModel):
+    title: str
+    summary: str | None = None
+    image_url: str | None = None
+    page_url: str | None = None
+    lang: str | None = None
+    was_existing: bool
+
 @app.get("/health")
 def health():
     return {"ok": True}
 
 @app.post("/start", response_model=StartOut)
 def start():
-    # Use a new thread_id; LangGraph checkpoint will preserve state by this id
     thread_id = uuid.uuid4().hex
     return {"session_id": thread_id, "message": initial_message}
 
 @app.post("/chat", response_model=ChatOut)
 def chat(body: ChatIn):
-    # Send only the per-turn input; checkpoint fills the rest of the state for this thread
     state_in = {"last_user_text": body.message}
-
     state_out = app_graph.invoke(state_in, config={"configurable": {"thread_id": body.session_id}})
 
     return {
@@ -58,3 +70,15 @@ def chat(body: ChatIn):
         "error": state_out.get("error"),
     }
 
+@app.post("/select-city", response_model=SelectCityOut)
+def select_city(body: SelectCityIn):
+    r = resolve_city(city=body.city, country=body.country, lang=body.lang)
+    p = r["payload"]
+    return {
+        "title": p.get("title") or body.city,
+        "summary": p.get("summary"),
+        "image_url": p.get("image_url") or p.get("thumb_url"),
+        "page_url": p.get("page_url"),
+        "lang": p.get("lang"),
+        "was_existing": bool(r.get("was_existing")),
+    }

@@ -12,7 +12,6 @@ import google.generativeai as genai
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-# ====================== Setup & Config ======================
 load_dotenv()
 
 @dataclass
@@ -27,7 +26,6 @@ class Settings:
 SETTINGS = Settings()
 SETTINGS.ensure()
 
-# Gemini model
 _gen_config_json = {"response_mime_type": "application/json"}
 
 genai.configure(api_key=SETTINGS.api_key)
@@ -40,7 +38,6 @@ MODEL = genai.GenerativeModel(
     ),
 )
 
-# ====================== Types ======================
 class Prefs(TypedDict, total=False):
     interests: List[str]
     climate: str
@@ -69,7 +66,6 @@ class ChatState(TypedDict, total=False):
     out_message: str | None
     out_recs: list[dict] | None
 
-# ====================== Deterministic Planner ======================
 FIELD_ORDER = [
     "interests",
     "region",
@@ -97,7 +93,6 @@ QUESTION_BANK = {
 COOLDOWN_ROUNDS = 2
 NO_PROGRESS_NUDGE = 3
 
-# ====================== Helpers ======================
 
 def _strip_code_fences(text: str) -> str:
     t = (text or "").strip()
@@ -109,12 +104,10 @@ def _strip_code_fences(text: str) -> str:
 
 def _extract_json(text: str):
     t = _strip_code_fences(text)
-    # Fast path
     try:
         return json.loads(t)
     except Exception:
         pass
-    # Fallback: find first JSON object/array
     m = re.search(r"(\{[^]*\}|\[[^]*\])", t)
     if m:
         try:
@@ -130,7 +123,6 @@ def llm_json(prompt: str):
         resp = MODEL.generate_content(prompt, generation_config=_gen_config_json)
         return _extract_json(getattr(resp, "text", "") or "")
     except Exception:
-        # Loose fallback without forcing JSON MIME type
         resp = MODEL.generate_content(prompt)
         return _extract_json(getattr(resp, "text", "") or "")
 
@@ -162,7 +154,7 @@ def merge_prefs(existing: Prefs, newbits: dict) -> Prefs:
             if out.get(k) != val:
                 out[k] = val
                 changed = True
-    out["__changed__"] = changed  # harmless flag; ignore if unused
+    out["__changed__"] = changed 
     return out
 
 
@@ -191,7 +183,6 @@ RECOMMEND_PROMPT = (
     "- JSON ONLY.\n"
 )
 
-# ====================== Public helpers ======================
 
 def initial_greeting() -> str:
     return "Hi! Tell me a bit about your trip goal and interests (e.g., beaches, museums, nightlife)."
@@ -228,7 +219,6 @@ def plan_next_question(state: ChatState) -> str:
     state["last_question_key"] = None
     return "Share any detail you like (budget, climate, region, season, duration) — or type 'recommend'."
 
-# ====================== LangGraph nodes ======================
 
 def ingest_node(state: ChatState) -> ChatState:
     state.setdefault("prefs", {})
@@ -315,7 +305,6 @@ def recommend_node(state: ChatState) -> ChatState:
         state["error"] = str(e)
         return state
 
-# ====================== Build graph ======================
 
 def build_graph():
     g = StateGraph(ChatState)
@@ -333,11 +322,9 @@ def build_graph():
     g.add_edge("ask", END)
     g.add_edge("recommend", END)
 
-    # In-memory only
     checkpointer = MemorySaver()
     return g.compile(checkpointer=checkpointer)
 
-# Convenience export
 initial_message = (
     "Hi! Tell me a bit about your trip goal and interests (e.g., beaches, museums, nightlife)."
 )
